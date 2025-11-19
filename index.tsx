@@ -5,8 +5,55 @@ import { Layout } from './Layout';
 import { ViewState, Workout, Exercise } from './types';
 import { Dumbbell, Sparkles, Play, Calendar, Trophy, Activity, Loader2, Save, Trash2, BarChart2, User } from 'lucide-react';
 
+// --- Error Boundary ---
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 text-white bg-red-950/80 h-screen flex flex-col items-center justify-center text-center">
+          <h1 className="text-2xl font-bold mb-4 text-red-400">Ops! Algo deu errado.</h1>
+          <div className="text-left bg-black/50 p-4 rounded-lg max-w-full overflow-auto border border-red-900/50">
+            <p className="text-red-200 font-mono text-sm whitespace-pre-wrap">
+              {this.state.error?.message || "Erro desconhecido"}
+            </p>
+          </div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-6 px-6 py-2 bg-red-600 hover:bg-red-500 rounded-full text-white font-medium transition-colors"
+          >
+            Recarregar Página
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 // --- Custom CSS Injection for "Aura" Theme ---
-// This allows us to use the custom class names from the provided Layout without a tailwind.config.js
 const AuraStyles = () => (
   <style>{`
     .bg-aura-dark { background-color: #09090b; }
@@ -28,17 +75,22 @@ const AuraStyles = () => (
     ::-webkit-scrollbar-track { background: #09090b; }
     ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 10px; }
     ::-webkit-scrollbar-thumb:hover { background: #34d399; }
+
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fade-in 0.5s ease-out forwards;
+    }
   `}</style>
 );
-
-// --- Initialization ---
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- Components ---
 
 const Dashboard = ({ workouts, onStartWorkout }: { workouts: Workout[], onStartWorkout: (w: Workout) => void }) => {
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 animate-fade-in">
       <header className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-white">Olá, Atleta</h1>
@@ -89,7 +141,7 @@ const Dashboard = ({ workouts, onStartWorkout }: { workouts: Workout[], onStartW
                   </div>
                   <button 
                     onClick={() => onStartWorkout(workout)}
-                    className="w-8 h-8 rounded-full bg-aura-mint flex items-center justify-center text-aura-dark hover:scale-110 transition-transform"
+                    className="w-8 h-8 rounded-full bg-aura-mint flex items-center justify-center text-aura-dark hover:scale-110 transition-transform cursor-pointer"
                   >
                     <Play size={14} fill="currentColor" />
                   </button>
@@ -124,6 +176,15 @@ const WorkoutBuilder = ({ onSave }: { onSave: (workout: Workout) => void }) => {
     setGeneratedWorkout(null);
 
     try {
+      // Safely access API Key to prevent crashes if environment is not configured correctly
+      const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : undefined;
+      
+      if (!apiKey) {
+        throw new Error("API Key não encontrada. O aplicativo precisa ser configurado com uma chave de API do Google Gemini.");
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: `Crie um treino detalhado para o seguinte objetivo: "${prompt}". Retorne em português do Brasil.`,
@@ -168,14 +229,15 @@ const WorkoutBuilder = ({ onSave }: { onSave: (workout: Workout) => void }) => {
       setGeneratedWorkout(newWorkout);
     } catch (error) {
       console.error("Erro ao gerar treino:", error);
-      alert("Ocorreu um erro ao gerar o treino. Tente novamente.");
+      const msg = error instanceof Error ? error.message : "Erro desconhecido";
+      alert(`Erro: ${msg}`);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="p-6 h-full flex flex-col">
+    <div className="p-6 h-full flex flex-col animate-fade-in">
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
           <Sparkles className="text-aura-mint" />
@@ -196,7 +258,7 @@ const WorkoutBuilder = ({ onSave }: { onSave: (workout: Workout) => void }) => {
           <button
             onClick={handleGenerate}
             disabled={loading || !prompt.trim()}
-            className="w-full bg-gradient-to-r from-aura-mint to-emerald-600 text-aura-dark font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:shadow-[0_0_20px_rgba(52,211,153,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-gradient-to-r from-aura-mint to-emerald-600 text-aura-dark font-bold py-4 rounded-xl flex items-center justify-center gap-2 hover:shadow-[0_0_20px_rgba(52,211,153,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             {loading ? (
               <>
@@ -219,7 +281,7 @@ const WorkoutBuilder = ({ onSave }: { onSave: (workout: Workout) => void }) => {
                 <button
                   key={sug}
                   onClick={() => setPrompt(sug)}
-                  className="text-xs bg-white/5 px-3 py-2 rounded-full hover:bg-white/10 transition-colors text-white/80"
+                  className="text-xs bg-white/5 px-3 py-2 rounded-full hover:bg-white/10 transition-colors text-white/80 cursor-pointer"
                 >
                   {sug}
                 </button>
@@ -253,13 +315,13 @@ const WorkoutBuilder = ({ onSave }: { onSave: (workout: Workout) => void }) => {
           <div className="flex gap-3">
             <button 
               onClick={() => setGeneratedWorkout(null)}
-              className="flex-1 py-3 rounded-xl border border-white/10 text-white hover:bg-white/5 flex items-center justify-center gap-2"
+              className="flex-1 py-3 rounded-xl border border-white/10 text-white hover:bg-white/5 flex items-center justify-center gap-2 cursor-pointer"
             >
               <Trash2 size={18} /> Descartar
             </button>
             <button 
               onClick={() => onSave(generatedWorkout)}
-              className="flex-[2] py-3 rounded-xl bg-aura-mint text-aura-dark font-bold hover:bg-emerald-400 flex items-center justify-center gap-2"
+              className="flex-[2] py-3 rounded-xl bg-aura-mint text-aura-dark font-bold hover:bg-emerald-400 flex items-center justify-center gap-2 cursor-pointer"
             >
               <Save size={18} /> Salvar Treino
             </button>
@@ -271,7 +333,7 @@ const WorkoutBuilder = ({ onSave }: { onSave: (workout: Workout) => void }) => {
 };
 
 const Stats = () => (
-  <div className="p-6 flex flex-col h-full items-center justify-center text-center">
+  <div className="p-6 flex flex-col h-full items-center justify-center text-center animate-fade-in">
     <div className="w-24 h-24 bg-aura-card rounded-full flex items-center justify-center mb-6 animate-pulse">
       <BarChart2 size={40} className="text-aura-mute" />
     </div>
@@ -281,7 +343,7 @@ const Stats = () => (
 );
 
 const Profile = () => (
-  <div className="p-6">
+  <div className="p-6 animate-fade-in">
     <header className="mb-8 text-center">
       <div className="w-24 h-24 mx-auto bg-gradient-to-br from-aura-card to-white/5 rounded-full flex items-center justify-center border-2 border-aura-mint mb-4">
         <User size={40} className="text-white" />
@@ -332,13 +394,11 @@ const App = () => {
   };
 
   const handleStartWorkout = (workout: Workout) => {
-    // In a real app, this would navigate to the Player view
-    console.log("Starting workout", workout.title);
     alert(`Iniciando treino: ${workout.title}`);
   };
 
   return (
-    <>
+    <ErrorBoundary>
       <AuraStyles />
       <Layout currentView={currentView} setCurrentView={setCurrentView}>
         {currentView === ViewState.DASHBOARD && (
@@ -350,9 +410,29 @@ const App = () => {
         {currentView === ViewState.STATS && <Stats />}
         {currentView === ViewState.PROFILE && <Profile />}
       </Layout>
-    </>
+    </ErrorBoundary>
   );
 };
 
-const root = createRoot(document.getElementById('root')!);
-root.render(<App />);
+// --- Entry Point ---
+// Ensure DOM is ready
+const mount = () => {
+  const rootElement = document.getElementById('root');
+  if (rootElement) {
+    try {
+      const root = createRoot(rootElement);
+      root.render(<App />);
+    } catch (e) {
+      console.error("Failed to create root:", e);
+      rootElement.innerHTML = '<div style="color:red; padding: 20px;">Erro crítico ao inicializar aplicação.</div>';
+    }
+  } else {
+    console.error("Root element not found");
+  }
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', mount);
+} else {
+  mount();
+}
